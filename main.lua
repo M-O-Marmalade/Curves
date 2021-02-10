@@ -6,15 +6,17 @@ local vb = renoise.ViewBuilder()
 local window_obj = nil
 local window_content = nil
 
-local gridsize = {x = 32, y = 32}
+local gridsize = {x = 48, y = 48}
 local curvegrid = {}
 local buffer1 = {}
 local buffer2 = {}
 local points = { {0,1,1}, {1,0,1} } --x,y,weight
 local selectedpoint = 1
 local padreleased = true
+local rainbow_mode = true
 local use_x_rainbow = true
 local idle_processing = false
+local sample_size_multiplier = 1
 
 local point_x
 local point_y
@@ -116,9 +118,9 @@ local function calculate_curve()
     end
   end
   
-  local samplesize = gridsize.x * 2
+  local samplesize = gridsize.x * sample_size_multiplier
   
-  --for each x coordinate on the grid, find the correct y coordinate
+  --find the x,y coords for each samplesize'd-increment of t along our curve
   for x = 1, samplesize do
     
     --get our t value
@@ -141,13 +143,17 @@ local function calculate_curve()
     
     if not (coords[1] < coords[1] - 1 and coords[2] < coords[2] - 1) then --nan check
       --add this pixel into our buffer
-      
-      if use_x_rainbow then
-        --draw our line rainbow according to x coordinates
-        buffer1[coords[1]][coords[2]] = ("rainbow/" .. math.floor((coords[1] * 23) / gridsize.x))
+      if rainbow_mode then
+        if use_x_rainbow then
+          --draw our line rainbow according to x coordinates
+          buffer1[coords[1]][coords[2]] = ("rainbow/" .. math.floor((coords[1] * 23) / gridsize.x))
+        else
+          --draw our line rainbow according to t value
+          buffer1[coords[1]][coords[2]] = ("rainbow/" .. math.floor(t * 23))
+        end
       else
-        --draw our line rainbow according to t value
-        buffer1[coords[1]][coords[2]] = ("rainbow/" .. math.floor(t * 23))
+        --draw our line white
+          buffer1[coords[1]][coords[2]] = 1
       end
     end
   
@@ -359,6 +365,15 @@ local function create_dialog()
       },
       
       vb:checkbox {
+        tooltip = "Rainbow Mode",
+        value = rainbow_mode,      
+        notifier = function(val)
+          rainbow_mode = val
+          queue_processing()
+        end
+      },
+      
+      vb:checkbox {
         tooltip = "True - Distribute rainbow across range of the line segment fully\nFalse - Distribute rainbow across range of entire window based on X coordinate",
         value = use_x_rainbow,      
         notifier = function(val)
@@ -374,7 +389,23 @@ local function create_dialog()
           idle_processing = val
           queue_processing()
         end
-      }
+      },
+      
+      vb:minislider {
+        tooltip = "t sample size multiplier",
+        width = gridsize.x / 1.5,
+        height = 16,
+        min = 0,
+        max = 16,
+        value = 0,
+        notifier = function(value)
+          
+          sample_size_multiplier = value + 1
+          
+          queue_processing()
+          
+        end                      
+      },
     }
     
     window_content:add_child(controlrow)
