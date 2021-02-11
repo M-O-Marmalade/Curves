@@ -14,9 +14,9 @@ local points = { {0,1,1}, {1,0,1} } --x,y,weight
 local selectedpoint = 1
 local padreleased = true
 local rainbow_mode = true
-local use_x_rainbow = true
+local use_x_rainbow = false
 local idle_processing = false
-local sample_size_multiplier = 1
+local sample_size_multiplier = 4
 
 local point_x
 local point_y
@@ -173,14 +173,71 @@ local function show_points()
     --convert from float in 0-1 range to integer in 1-gridsize range
     point[2] = math.floor(p[2] * (gridsize.y-1) + 1.5)
     
-    buffer1[point[1]][point[2]] = 1
+    --add this pixel into our buffer
+    if rainbow_mode then
+      
+      --get the t value where this point exerts its influence on the line
+      local t = (i-1) / (#points-1)
+      
+      --get the coordinates of where the line sits for that t value
+      local coords = get_curve(t,points)
+
+      --convert from float in 0-1 range to integer in 1-gridsize range
+      coords[1] = math.floor(coords[1] * (gridsize.x-1) + 1.5)
+      
+      --convert from float in 0-1 range to integer in 1-gridsize range
+      coords[2] = math.floor(coords[2] * (gridsize.y-1) + 1.5)
+      
+      if use_x_rainbow then
+        --draw our point rainbow according to x coordinates
+        buffer1[point[1]][point[2]] = ("rainbow/" .. math.floor((coords[1] * 23) / gridsize.x))
+      else
+        --draw our point rainbow according to t value
+        buffer1[point[1]][point[2]] = ("rainbow/" .. math.floor(t * 23))
+      end
+        
+    else
+      --draw our point white
+        buffer1[point[1]][point[2]] = 1
+    end
+    
+    --draw a grey cross around our currently selected point
+    if i == selectedpoint then
+      if point[1] - 1 > 0 then buffer1[point[1] - 1][point[2]] = 0.25 end
+      if point[1] + 1 < gridsize.x then buffer1[point[1] + 1][point[2]] = 0.25 end
+      if point[2] - 1 > 0 then buffer1[point[1]][point[2] - 1] = 0.25 end
+      if point[2] + 1 < gridsize.y then buffer1[point[1]][point[2] + 1] = 0.25 end
+    end
     
   end
 
 end
 
+--SHOW GUIDES-----------------------------
+local function show_guides()
+
+  buffer1[math.floor((gridsize.x/2) + 0.5)][1] = 0.25
+  buffer1[math.floor((gridsize.x/2) + 0.5)][gridsize.y] = 0.25
+  buffer1[1][math.floor((gridsize.y/2) + 0.5)] = 0.25
+  buffer1[gridsize.x][math.floor((gridsize.y/2) + 0.5)] = 0.25
+  
+  buffer1[math.floor((gridsize.x/2) + 0.5)][math.floor((gridsize.y/2) + 0.5)] = 0.25
+
+end
+
+--UPDATE TEXTS-----------------------------
+local function update_texts()
+
+  vb.views.sel_text.value = selectedpoint
+  vb.views.x_text.value = points[selectedpoint][1]
+  vb.views.y_text.value = points[selectedpoint][2]
+
+end
+
 --PROCESSING---------------------------------
 local function processing()
+
+  show_guides()
 
   calculate_curve()
   
@@ -188,7 +245,7 @@ local function processing()
           
   update_curve_grid()
   
-  vb.views.sel_text.text = tostring(selectedpoint)
+  update_texts()
 
 end
 
@@ -320,95 +377,200 @@ local function create_dialog()
     window_content:add_child(curvegridcontent)
     
     
-    local controlrow = vb:row {  
+    local controlcolumn = vb:column {  
       
-      vb:text{
-        id = "sel_text",
-        text = "1",
-      },
-      
-      vb:minislider {
-        id = "slider",
-        tooltip = "Set the weight of the selected point",
-        width = gridsize.x,
-        height = 16,
-        min = -1,
-        max = 4,
-        value = 0,
-        notifier = function(value)
+      vb:row {
+        
+        vb:valuefield {
+          id = "sel_text",
+          width = 16,
+          tooltip = "Currently selected point",
+          min = 1,
+          max = 99,
+          value = selectedpoint,
           
-          points[selectedpoint][3] = value + 1
+          --tonumber converts any typed-in user input to a number value 
+          --(called only if value was typed)
+          tonumber = function(str)
+            local val = str:gsub("[^0-9.-]", "") --filter string to get numbers and decimals
+            val = tonumber(val) --this tonumber() is Lua's basic string-to-number converter
+            if val and 1 <= val then --if val is a number, and within min/max
+              selectedpoint = val
+              vb.views.slider.value = points[selectedpoint][3] - 1
+              queue_processing()
+            end
+            return val
+          end,
           
-          queue_processing()
+          --tostring is called when field is clicked, 
+          --after tonumber is called,
+          --and after the notifier is called
+          --it converts the value to a formatted string to be displayed
+          tostring = function(value)
+            return ("%i"):format(value)
+          end,        
           
-        end                      
-      },
-      
-      vb:button {
-        text = "+",
-        tooltip = "Add a new control point",
-        pressed = function()
-          table.insert(points, math.floor(#points/2 + 1), {0.5,0.5,1})
-          queue_processing()
-        end
-      },
-      
-      vb:button {
-        text = "-",
-        tooltip = "Remove the currently selected control point",
-        pressed = function()
-          if #points > 1 then
-            table.remove(points, selectedpoint)
+          --notifier is called whenever the value is changed
+          notifier = function(value)
+          end
+        },
+        
+        vb:minislider {
+          id = "slider",
+          tooltip = "Set the weight of the selected point",
+          width = gridsize.x,
+          height = 16,
+          min = -1,
+          max = 8,
+          value = 0,
+          notifier = function(value)
+            
+            points[selectedpoint][3] = value + 1
+            
+            queue_processing()
+            
+          end                      
+        },
+        
+        vb:button {
+          text = "+",
+          tooltip = "Add a new control point after the currently selected control point",
+          pressed = function()
+            table.insert(points, math.floor(selectedpoint + 1), {0.5,0.5,1})
+            selectedpoint = selectedpoint + 1
             queue_processing()
           end
-        end
-      },
-      
-      vb:checkbox {
-        tooltip = "Rainbow Mode",
-        value = rainbow_mode,      
-        notifier = function(val)
-          rainbow_mode = val
-          queue_processing()
-        end
-      },
-      
-      vb:checkbox {
-        tooltip = "True - Distribute rainbow across range of the line segment fully\nFalse - Distribute rainbow across range of entire window based on X coordinate",
-        value = use_x_rainbow,      
-        notifier = function(val)
-          use_x_rainbow = val
-          queue_processing()
-        end
-      },
-      
-      vb:checkbox {
-      tooltip = "True - Offload processing to idle notifier\nFalse - Process changes immediately",
-        value = idle_processing,      
-        notifier = function(val)
-          idle_processing = val
-          queue_processing()
-        end
-      },
-      
-      vb:minislider {
-        tooltip = "t sample size multiplier",
-        width = gridsize.x / 1.5,
-        height = 16,
-        min = 0,
-        max = 16,
-        value = 0,
-        notifier = function(value)
+        },
+        
+        vb:button {
+          text = "-",
+          tooltip = "Remove the currently selected control point",
+          pressed = function()
+            if #points > 2 then
+              table.remove(points, selectedpoint)
+              queue_processing()
+            end
+          end
+        },
+        
+        vb:valuefield {
+          id = "x_text",
+          width = 32,
+          tooltip = "X coordinate of the currently selected point",
+          min = 0,
+          max = 1,
+          value = points[selectedpoint][1],
           
-          sample_size_multiplier = value + 1
+          --tonumber converts any typed-in user input to a number value 
+          --(called only if value was typed)
+          tonumber = function(str)
+            local val = str:gsub("[^0-9.-]", "") --filter string to get numbers and decimals
+            val = tonumber(val) --this tonumber() is Lua's basic string-to-number converter
+            if val and 0 <= val and val <= 1 then --if val is a number, and within min/max
+              --set point to our xyPad coordinates
+              points[selectedpoint][1] = val
+              queue_processing()
+            end
+            return val
+          end,
           
-          queue_processing()
+          --tostring is called when field is clicked, 
+          --after tonumber is called,
+          --and after the notifier is called
+          --it converts the value to a formatted string to be displayed
+          tostring = function(value)
+            return ("%.3f"):format(value)
+          end,        
           
-        end                      
+          --notifier is called whenever the value is changed
+          notifier = function(value)
+          end
+        },
+        
+        vb:valuefield {
+          id = "y_text",
+          width = 32,
+          tooltip = "Y coordinate of the currently selected point",
+          min = 0,
+          max = 1,
+          value = points[selectedpoint][2],
+          
+          --tonumber converts any typed-in user input to a number value 
+          --(called only if value was typed)
+          tonumber = function(str)
+            local val = str:gsub("[^0-9.-]", "") --filter string to get numbers and decimals
+            val = tonumber(val) --this tonumber() is Lua's basic string-to-number converter
+            if val and 0 <= val and val <= 1 then --if val is a number, and within min/max
+              --set point to our xyPad coordinates
+              points[selectedpoint][2] = val
+              queue_processing()
+            end
+            return val
+          end,
+          
+          --tostring is called when field is clicked, 
+          --after tonumber is called,
+          --and after the notifier is called
+          --it converts the value to a formatted string to be displayed
+          tostring = function(value)
+            return ("%.3f"):format(value)
+          end,        
+          
+          --notifier is called whenever the value is changed
+          notifier = function(value)
+          end
+        }
+        
       },
+      
+      vb:row {
+        
+        vb:checkbox {
+          tooltip = "Rainbow Mode",
+          value = rainbow_mode,      
+          notifier = function(val)
+            rainbow_mode = val
+            queue_processing()
+          end
+        },
+        
+        vb:checkbox {
+          tooltip = "True - Distribute rainbow across range of entire window based on X coordinate\nFalse - Distribute rainbow across range of the line segment fully",
+          value = use_x_rainbow,      
+          notifier = function(val)
+            use_x_rainbow = val
+            queue_processing()
+          end
+        },
+        
+        vb:checkbox {
+        tooltip = "True - Offload processing to idle notifier\nFalse - Process changes immediately",
+          value = idle_processing,      
+          notifier = function(val)
+            idle_processing = val
+            queue_processing()
+          end
+        },
+        
+        vb:minislider {
+          tooltip = "t sample size multiplier",
+          width = gridsize.x,
+          height = 16,
+          min = 0,
+          max = 16,
+          value = 0,
+          notifier = function(value)
+            
+            sample_size_multiplier = value + 1
+            
+            queue_processing()
+            
+          end                      
+        }
+      }
     }
     
-    window_content:add_child(controlrow)
+    window_content:add_child(controlcolumn)
 
     
   end
