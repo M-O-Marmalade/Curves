@@ -10,13 +10,16 @@ local gridsize = {x = 48, y = 48}
 local curvegrid = {}
 local buffer1 = {}
 local buffer2 = {}
-local points = { {0,1,1}, {1,0,1} } --x,y,weight
+local points = { {0.1,0.1,1}, {0.9,0.9,1} } --x,y,weight
 local selectedpoint = 1
 local padreleased = true
-local rainbow_mode = true
+local rainbow_mode = false
 local use_x_rainbow = false
 local idle_processing = false
-local sample_size_multiplier = 4
+local samplesize = 2
+local draw_mode = false
+
+local sampled_points = {}
 
 local point_x
 local point_y
@@ -118,7 +121,9 @@ local function calculate_curve()
     end
   end
   
-  local samplesize = gridsize.x * sample_size_multiplier
+  table.clear(sampled_points)
+  
+  local samplesize = samplesize
   
   --find the x,y coords for each samplesize'd-increment of t along our curve
   for x = 1, samplesize do
@@ -130,35 +135,146 @@ local function calculate_curve()
     
     --rprint(coords)
     
-    --convert from float in 0-1 range to integer in 1-gridsize range
-    coords[1] = math.floor(coords[1] * (gridsize.x-1) + 1.5)
+    sampled_points[x] = {coords[1],coords[2]}
     
-    --convert from float in 0-1 range to integer in 1-gridsize range
-    coords[2] = math.floor(coords[2] * (gridsize.y-1) + 1.5)
     
-    --print(t)
-    
-    --print("coords[1]: " .. coords[1])
-    --print("coords[2]: " .. coords[2])
-    
-    if not (coords[1] < coords[1] - 1 and coords[2] < coords[2] - 1) then --nan check
-      --add this pixel into our buffer
-      if rainbow_mode then
-        if use_x_rainbow then
-          --draw our line rainbow according to x coordinates
-          buffer1[coords[1]][coords[2]] = ("rainbow/" .. math.floor((coords[1] * 23) / gridsize.x))
-        else
-          --draw our line rainbow according to t value
-          buffer1[coords[1]][coords[2]] = ("rainbow/" .. math.floor(t * 23))
-        end
-      else
-        --draw our line white
-          buffer1[coords[1]][coords[2]] = 1
-      end
-    end
   
   end
 
+end
+
+--REMAP RANGE-------------------------------------------------------
+local function remap_range(val,lo1,hi1,lo2,hi2)
+
+  return lo2 + (hi2 - lo2) * ((val - lo1) / (hi1 - lo1))
+
+end
+
+--SIGN------------------------------------
+local function sign(number)
+  return number > 0 and 1 or (number == 0 and 0 or -1)
+end
+
+--RASTERIZE CURVE------------------------------------
+local function rasterize_curve()
+
+  if draw_mode then
+  
+    for i = 1, #sampled_points - 1 do
+    
+      local coords = {sampled_points[i][1],sampled_points[i][2]}
+  
+      --convert from float in 0-1 range to integer in 1-gridsize range
+      coords[1] = math.floor(coords[1] * (gridsize.x-1) + 1.5)
+      
+      --convert from float in 0-1 range to integer in 1-gridsize range
+      coords[2] = math.floor(coords[2] * (gridsize.y-1) + 1.5)    
+      
+      if not (coords[1] < coords[1] - 1 and coords[2] < coords[2] - 1) then --nan check
+        --add this pixel into our buffer
+        if rainbow_mode then
+          if use_x_rainbow then
+            --draw our line rainbow according to x coordinates
+            buffer1[coords[1]][coords[2]] = ("rainbow/" .. math.floor(remap_range(coords[1],1,gridsize.x,0,23)))
+          else
+            --draw our line rainbow according to t value
+            buffer1[coords[1]][coords[2]] = ("rainbow/" .. math.floor(remap_range(i,1,#sampled_points,0,23)))
+          end
+        else
+          --draw our line white
+            buffer1[coords[1]][coords[2]] = 1
+        end
+      end
+      
+    end
+  
+  else
+
+    for i = 1, #sampled_points - 1 do
+    
+      --print(i)
+      
+      local point_a, point_b, pixel_a, pixel_b = 
+        { sampled_points[i][1], sampled_points[i][2] },
+        { sampled_points[i+1][1], sampled_points[i+1][2] },
+        {},
+        {}
+        
+        
+      --convert point_a from float in 0-1 range to float in 1-gridsize range
+      point_a[1] = remap_range(point_a[1],0,1,1,gridsize.x)
+      point_a[2] = remap_range(point_a[2],0,1,1,gridsize.y)
+      
+      --convert point_b from float in 0-1 range to float in 1-gridsize range
+      point_b[1] = remap_range(point_b[1],0,1,1,gridsize.x)
+      point_b[2] = remap_range(point_b[2],0,1,1,gridsize.y)
+        
+      --local floatslope = (point_b[2] - point_a[2]) / (point_b[1] - point_a[1]) --y/x
+          
+      --convert point_a from float to integer (pixel)
+      pixel_a[1] = math.floor(point_a[1] + 0.5)
+      pixel_a[2] = math.floor(point_a[2] + 0.5)
+      
+      --convert point_b from float to integer (pixel)
+      pixel_b[1] = math.floor(point_b[1] + 0.5)
+      pixel_b[2] = math.floor(point_b[2] + 0.5)
+      
+      local color
+      if rainbow_mode and not use_x_rainbow then
+        --draw our line rainbow according to t value
+        color = ("rainbow/" .. math.floor(remap_range(i,1,#sampled_points,0,23)))
+      else
+        --draw our line white
+          color = 1
+      end
+      
+      --calculate the difference in our x and y coords from point b to point a
+      local diff = { pixel_b[1]-pixel_a[1] , pixel_b[2]-pixel_a[2] }
+      
+      --find out which plane we will traverse by 1 pixel each loop iteration
+      local plane
+      if math.abs(diff[1]) >= math.abs(diff[2]) then
+        --we want to traverse the x-plane
+        plane = 1
+      else
+        --we want to traverse the y-plane
+        plane = 2
+      end
+      
+      --determine if we will be moving in positive or negative direction along plane
+      local step = sign(diff[plane])
+      
+      --calculate our slope
+      local slope = step * ((plane == 1 and diff[2]/diff[1]) or diff[1]/diff[2]) --(our slope is dependent on which plane we're on)
+      
+      local current_coords = {pixel_a[1],pixel_a[2]}
+      local slope_acc = 0
+      while(true) do
+      
+        if rainbow_mode and use_x_rainbow then
+          --draw our line rainbow according to x coordinates
+          buffer1[current_coords[1]][current_coords[2]] = 
+            ("rainbow/" .. math.floor(remap_range(current_coords[1],1,gridsize.x,0,23)))
+        else        
+          buffer1[current_coords[1]][current_coords[2]] = color
+        end
+        
+        if current_coords[plane] == pixel_b[plane] then break end --if we are at the end pixel, we break
+        
+        current_coords[plane] = current_coords[plane] + step
+        slope_acc = slope_acc + slope
+        current_coords[plane%2 + 1] = math.floor(pixel_a[plane%2 + 1] + slope_acc)
+      
+      end
+      
+    end
+    
+  end
+  
+  
+  
+        
+  
 end
 
 --SHOW POINTS-----------------------------
@@ -241,6 +357,8 @@ local function processing()
 
   calculate_curve()
   
+  rasterize_curve()
+  
   show_points()
           
   update_curve_grid()
@@ -274,14 +392,14 @@ end
 --FIND NEAREST POINT------------------------------------
 local function find_nearest_point(x,y)
   
-  print("x: " .. x .. "  y: " .. y)
+  --print("x: " .. x .. "  y: " .. y)
   
   local nearest_point = {5,0} --distance,index
   for k,point in ipairs(points) do
     
     local distance = math.abs(x - point[1]) + math.abs(y - point[2])
     
-    print("point: " .. k .. "   distance: " .. distance)
+    --print("point: " .. k .. "   distance: " .. distance)
     
     if distance < nearest_point[1] then
       nearest_point[2] = k
@@ -552,16 +670,26 @@ local function create_dialog()
           end
         },
         
+        vb:checkbox {
+        tooltip = "Point Mode",
+          value = draw_mode,      
+          notifier = function(val)
+            draw_mode = val
+            queue_processing()
+          end
+        },
+        
         vb:minislider {
-          tooltip = "t sample size multiplier",
+          tooltip = "t sample size",
           width = gridsize.x,
           height = 16,
           min = 0,
-          max = 16,
+          max = 524,
           value = 0,
           notifier = function(value)
             
-            sample_size_multiplier = value + 1
+            samplesize = math.floor(value + 1)
+            print("samplesize: " .. samplesize)
             
             queue_processing()
             
