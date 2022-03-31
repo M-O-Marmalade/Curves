@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <RenoiseScriptingTool doc_version="0">
-  <Name>Curve Tests</Name>
+  <Name>Curves</Name>
   <Author>MOMarmalade [xephyrpanda@yahoo.com]</Author>
-  <Id>mom.MOMarmalade.CurveTests</Id>
+  <Id>mom.MOMarmalade.Curves</Id>
   <Version>0.1.1</Version>
   <ApiVersion>6.1</ApiVersion>
   <Category>Tool Development</Category>
   <Description>Curve-drawing experiments</Description>
-  <Homepage>https://xephyrpanda.wixsite.com/citrus64</Homepage>
+  <Homepage>https://www.aqu.surf</Homepage>
 </RenoiseScriptingTool>
