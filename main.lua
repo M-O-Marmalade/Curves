@@ -10,14 +10,14 @@ local gridsize = {x = 48, y = 48}
 local curvegrid = {}
 local buffer1 = {}
 local buffer2 = {}
-local points = { {0.1,0.1,1}, {0.9,0.9,1} } --x,y,weight
+local points = { {0,1,1}, {1,1,1}, {1,0,1} } --x,y,weight
 local selectedpoint = 1
 local padreleased = true
-local rainbow_mode = false
+local rainbow_mode = true
 local use_x_rainbow = false
 local idle_processing = false
-local samplesize = 2
-local draw_mode = false
+local samplesize = 34
+local draw_points_mode = false
 
 local sampled_points = {}
 
@@ -53,8 +53,6 @@ end
 --GET CURVE--------------------------------------
 local function get_curve(t,points)
   
-  --print("t: " .. t)
-  
   local coords = {}  
   local numerators,denominators = {0,0},{0,0} --{x,y numerators}, {x,y denominators}
   local n = #points
@@ -66,9 +64,6 @@ local function get_curve(t,points)
       denominators[j] = denominators[j] + ( bern(t,i-1,n-1) * point[3] )
       
     end
-    
-    --print(j .. " numerator: " .. numerators[j])
-    --print(j .. " denominator: " .. denominators[j])
     
     coords[j] = numerators[j]/denominators[j]
     
@@ -158,7 +153,7 @@ end
 --RASTERIZE CURVE------------------------------------
 local function rasterize_curve()
 
-  if draw_mode then
+  if draw_points_mode then
   
     for i = 1, #sampled_points - 1 do
     
@@ -247,10 +242,14 @@ local function rasterize_curve()
       --calculate our slope
       local slope = step * ((plane == 1 and diff[2]/diff[1]) or diff[1]/diff[2]) --(our slope is dependent on which plane we're on)
       
-      local current_coords = {pixel_a[1],pixel_a[2]}
-      local slope_acc = 0
-      while(true) do
+      print("!!!!!!!!!!!!!!!!!")
       
+      local current_coords = {pixel_a[1],pixel_a[2]}
+      local slope_acc = point_a[plane%2 + 1] - pixel_a[plane%2 + 1]
+      while(true) do
+        
+        print("slope_acc: " .. slope_acc)
+        
         if rainbow_mode and use_x_rainbow then
           --draw our line rainbow according to x coordinates
           buffer1[current_coords[1]][current_coords[2]] = 
@@ -263,17 +262,13 @@ local function rasterize_curve()
         
         current_coords[plane] = current_coords[plane] + step
         slope_acc = slope_acc + slope
-        current_coords[plane%2 + 1] = math.floor(pixel_a[plane%2 + 1] + slope_acc)
+        current_coords[plane%2 + 1] = math.floor(pixel_a[plane%2 + 1] + slope_acc + 0.5)
       
       end
       
     end
     
   end
-  
-  
-  
-        
   
 end
 
@@ -353,15 +348,15 @@ end
 --PROCESSING---------------------------------
 local function processing()
 
-  show_guides()
+  show_guides() --displaying some grid markers
 
-  calculate_curve()
+  calculate_curve() --samples points on the curve and stores them
   
-  rasterize_curve()
+  rasterize_curve() --interpolates sampled points, adding them to the pixel buffer
   
-  show_points()
+  show_points() --showing the control points
           
-  update_curve_grid()
+  update_curve_grid() --pushes the pixel buffer to the display
   
   update_texts()
 
@@ -672,9 +667,9 @@ local function create_dialog()
         
         vb:checkbox {
         tooltip = "Point Mode",
-          value = draw_mode,      
+          value = draw_points_mode,      
           notifier = function(val)
-            draw_mode = val
+            draw_points_mode = val
             queue_processing()
           end
         },
