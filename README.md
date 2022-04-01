@@ -1,3 +1,3 @@
-Drawing Bézier curves in [Renoise](https://www.renoise.com/)
+Drawing interpolated<sup>∞</sup> rational Bézier curves in [Renoise](https://www.renoise.com/)
 
 ![Curves Demo](curves-demo.apng)
