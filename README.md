@@ -1,3 +1,3 @@
-Drawing interpolated<sup>n→∞</sup> rational Bézier curves in [Renoise](https://www.renoise.com/)
+Infinite-degree rational Bézier curves in [Renoise](https://www.renoise.com/)
 
 ![Curves Demo](curves-demo.apng)
