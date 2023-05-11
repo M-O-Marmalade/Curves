@@ -1,6 +1,6 @@
 # Curves
 
-Bézier curve editor demo. Calculates and renders arbitrary-degree, pixel-perfect, weighted Bézier curves.
+Bézier curve editor demo. Calculates and renders arbitrary-degree, pixel-perfect, weighted Bézier curves. All rendering routines were written from scratch in pure Lua.
 
 ![Curves Demo](Artwork/curves-demo.apng)
 
